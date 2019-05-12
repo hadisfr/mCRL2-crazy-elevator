@@ -1,0 +1,1 @@
+forall d: Direction . ([true*.doClose(1, d)]<true*.press(1, d)>true)

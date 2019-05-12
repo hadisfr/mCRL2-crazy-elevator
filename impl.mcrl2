@@ -1,0 +1,67 @@
+sort Status = struct ON | OFF;
+
+sort Direction = struct UP | DOWN | NONE;
+
+map
+    UPPER_BOUND: Int;
+    LOWER_BOUND: Int;
+eqn
+    UPPER_BOUND = 3;
+    LOWER_BOUND = 0;
+
+act press, unpress: Int # Direction;
+act open, allowOpen, close, allowClose, doOpen, doClose: Int # Direction;
+act sndButtonStat, rcvButtonStat, exchangeButtonStat: Int # Direction # Status;
+act moveDown, moveUp, noMove;
+
+proc
+
+    button(storey: Int, dir: Direction, stat: Status) =
+        (stat == OFF) -> press(storey, dir) . button(storey, dir, ON) +
+        (stat == ON) -> unpress(storey, dir) . button(storey, dir, OFF) +
+        sndButtonStat(storey, dir, stat) . button(storey, dir, stat);
+
+    door(storey: Int) =
+        open(storey, UP) . close(storey, UP) . door(storey) +
+        open(storey, DOWN) . close(storey, DOWN) . door(storey);
+
+    ctrl(storey: Int, dir: Direction) =
+        (dir == NONE) ->
+            sum n: Int . sum d: Direction . rcvButtonStat(n, d, ON) . (
+                ((n >= LOWER_BOUND && n <= UPPER_BOUND && n > storey) -> ctrl(storey, UP)) +
+                ((n >= LOWER_BOUND && n <= UPPER_BOUND &&  n < storey) -> ctrl(storey, DOWN)) +
+                ((n >= LOWER_BOUND && n <= UPPER_BOUND &&  n == storey) ->
+                    allowOpen(storey, d) . allowClose(storey, d) . ctrl(storey, d))
+            )
+            <> (
+                (dir == DOWN && storey > LOWER_BOUND) ->
+                    rcvButtonStat(storey, dir, OFF) . moveDown . ctrl(storey-1, dir) +
+                (dir == DOWN && storey == LOWER_BOUND) -> noMove . ctrl(storey, NONE) +
+                (dir == UP && storey < UPPER_BOUND) ->
+                    rcvButtonStat(storey, dir, OFF) . moveUp . ctrl(storey+1, dir) +
+                (dir == UP && storey == UPPER_BOUND) -> noMove . ctrl(storey, NONE) +
+                sum n: Int . sum d: Direction . rcvButtonStat(n, d, ON) .
+                    (n == storey && d == dir && (
+                        (storey < UPPER_BOUND && storey > LOWER_BOUND) ||
+                        (storey == UPPER_BOUND && dir == DOWN) ||
+                        (storey == LOWER_BOUND && dir == UP)
+                    )) -> allowOpen(storey, dir) . allowClose(storey, dir) . ctrl(storey, dir)
+            );
+
+init
+    hide({ exchangeButtonStat, noMove },
+        allow({ press, doOpen, doClose, exchangeButtonStat, moveDown, moveUp, noMove },
+            comm({
+                sndButtonStat | rcvButtonStat -> exchangeButtonStat,
+                allowOpen | open -> doOpen,
+                unpress | allowClose | close -> doClose
+            }, 
+                ctrl(0, NONE) ||
+                door(0) || door(1) || door(2) || door(3) ||
+                button(0, UP, OFF) || button(0, DOWN, OFF) ||
+                button(1, UP, OFF) || button(1, DOWN, OFF) ||
+                button(2, UP, OFF) || button(2, DOWN, OFF) ||
+                button(3, UP, OFF) || button(3, DOWN, OFF)
+            )
+        )
+    );
